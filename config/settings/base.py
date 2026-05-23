@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import ssl
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import dj_database_url
 from dotenv import load_dotenv
@@ -18,6 +20,16 @@ def env_bool(name: str, default: bool = False) -> bool:
 def env_list(name: str, default: str = "") -> list[str]:
     value = os.getenv(name, default)
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def ensure_rediss_ssl_param(url: str, default_req: str = "required") -> str:
+    if not url.startswith("rediss://"):
+        return url
+
+    parsed = urlparse(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.setdefault("ssl_cert_reqs", default_req)
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -128,8 +140,15 @@ SIMPLE_JWT = {
 }
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
+ssl_cert_reqs = os.getenv("CELERY_REDIS_SSL_CERT_REQS", "required")
+CELERY_BROKER_URL = ensure_rediss_ssl_param(
+    os.getenv("CELERY_BROKER_URL", REDIS_URL),
+    default_req=ssl_cert_reqs,
+)
+CELERY_RESULT_BACKEND = ensure_rediss_ssl_param(
+    os.getenv("CELERY_RESULT_BACKEND", REDIS_URL),
+    default_req=ssl_cert_reqs,
+)
 CELERY_TIMEZONE = os.getenv("CELERY_TIMEZONE", TIME_ZONE)
 CELERY_TASK_ALWAYS_EAGER = env_bool("CELERY_TASK_ALWAYS_EAGER", False)
 CELERY_TASK_EAGER_PROPAGATES = env_bool("CELERY_TASK_EAGER_PROPAGATES", False)
@@ -143,6 +162,19 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
     ),
     "socket_timeout": float(os.getenv("CELERY_REDIS_SOCKET_TIMEOUT", "2")),
 }
+ssl_cert_req_map = {
+    "required": ssl.CERT_REQUIRED,
+    "optional": ssl.CERT_OPTIONAL,
+    "none": ssl.CERT_NONE,
+    "CERT_REQUIRED": ssl.CERT_REQUIRED,
+    "CERT_OPTIONAL": ssl.CERT_OPTIONAL,
+    "CERT_NONE": ssl.CERT_NONE,
+}
+ssl_cert_req_value = ssl_cert_req_map.get(ssl_cert_reqs, ssl.CERT_REQUIRED)
+if CELERY_BROKER_URL.startswith("rediss://"):
+    CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": ssl_cert_req_value}
+if CELERY_RESULT_BACKEND.startswith("rediss://"):
+    CELERY_REDIS_BACKEND_USE_SSL = {"ssl_cert_reqs": ssl_cert_req_value}
 
 UPSTASH_REDIS_REST_URL = os.getenv("UPSTASH_REDIS_REST_URL", "")
 UPSTASH_REDIS_REST_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN", "")

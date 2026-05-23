@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 
 
 def _redis_hint() -> str:
+    broker_url = getattr(settings, "CELERY_BROKER_URL", "") or ""
+
+    if broker_url.startswith(("redis://", "rediss://")):
+        return (
+            "Redis broker connection failed. Verify REDIS_URL/CELERY_BROKER_URL reachability "
+            "and TLS options (ssl_cert_reqs) for rediss://."
+        )
+
     if settings.UPSTASH_REDIS_REST_URL and settings.UPSTASH_REDIS_REST_TOKEN:
         return (
             "Upstash REST credentials are present, but Celery broker requires a Redis TCP URL "
@@ -36,7 +44,7 @@ def schedule_notification(notification_id: int, eta=None, force_fail: bool = Fal
         return None
 
     if settings.CELERY_TASK_ALWAYS_EAGER:
-        return send_notification_task.delay(
+        return send_notification_task.run(
             notification_id=notification_id,
             force_fail=force_fail,
         )
@@ -60,8 +68,9 @@ def schedule_notification(notification_id: int, eta=None, force_fail: bool = Fal
                 "Running notification task locally for notification_id=%s due broker failure.",
                 notification_id,
             )
-            return send_notification_task.apply(
-                kwargs={"notification_id": notification_id, "force_fail": force_fail}
+            return send_notification_task.run(
+                notification_id=notification_id,
+                force_fail=force_fail,
             )
 
         Notification.objects.filter(id=notification_id).update(last_error=hint)

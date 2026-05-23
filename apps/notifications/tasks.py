@@ -7,7 +7,13 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from apps.notifications.models import MAX_RETRY_ATTEMPTS, Notification, NotificationStatus
+from apps.notifications.models import (
+    MAX_RETRY_ATTEMPTS,
+    Notification,
+    NotificationAttempt,
+    NotificationAttemptOutcome,
+    NotificationStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +30,7 @@ def _dispatch_notification(notification: Notification, force_fail: bool = False)
 
 @shared_task(name="notifications.send_notification")
 def send_notification_task(notification_id: int, force_fail: bool = False):
+    attempt_id = None
     try:
         with transaction.atomic():
             notification = Notification.objects.select_for_update().get(id=notification_id)
@@ -33,8 +40,20 @@ def send_notification_task(notification_id: int, force_fail: bool = False):
             }:
                 return {"notification_id": notification_id, "status": notification.status}
 
+            previous_status = notification.status
             notification.status = NotificationStatus.PROCESSING
             notification.save(update_fields=["status", "updated_at"])
+
+            attempt = NotificationAttempt.objects.create(
+                notification=notification,
+                attempt_number=notification.retry_count + 1,
+                status_before=previous_status,
+                status_after=NotificationStatus.PROCESSING,
+                outcome=NotificationAttemptOutcome.SENT,
+                started_at=timezone.now(),
+                finished_at=timezone.now(),
+            )
+            attempt_id = attempt.id
     except Notification.DoesNotExist:
         logger.warning("Notification %s not found during task processing.", notification_id)
         return {"notification_id": notification_id, "status": "missing"}
@@ -60,6 +79,13 @@ def send_notification_task(notification_id: int, force_fail: bool = False):
                     "updated_at",
                 ]
             )
+            if attempt_id:
+                NotificationAttempt.objects.filter(id=attempt_id).update(
+                    status_after=notification.status,
+                    outcome=NotificationAttemptOutcome.FAILED,
+                    error_message=str(exc),
+                    finished_at=timezone.now(),
+                )
         logger.exception("Notification %s failed to send.", notification_id)
         return {"notification_id": notification_id, "status": notification.status}
 
@@ -69,6 +95,13 @@ def send_notification_task(notification_id: int, force_fail: bool = False):
         notification.last_error = ""
         notification.processed_at = timezone.now()
         notification.save(update_fields=["status", "last_error", "processed_at", "updated_at"])
+        if attempt_id:
+            NotificationAttempt.objects.filter(id=attempt_id).update(
+                status_after=notification.status,
+                outcome=NotificationAttemptOutcome.SENT,
+                error_message="",
+                finished_at=timezone.now(),
+            )
 
     logger.info("Notification %s delivered successfully.", notification_id)
     return {"notification_id": notification_id, "status": NotificationStatus.SENT}

@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.notifications.models import Notification
+from apps.notifications.models import Notification, NotificationAttempt
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -41,3 +41,18 @@ class NotificationScheduleSerializer(serializers.Serializer):
         if value <= timezone.now():
             raise serializers.ValidationError("Scheduled time must be in the future.")
         return value
+
+
+class NotificationAttemptSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NotificationAttempt
+        fields = (
+            "id",
+            "attempt_number",
+            "status_before",
+            "status_after",
+            "outcome",
+            "error_message",
+            "started_at",
+            "finished_at",
+        )

@@ -45,6 +45,7 @@ Backend API for scheduling and processing notifications with Django, DRF, Celery
   - `POST /api/v1/notifications/` (create + schedule)
   - `GET /api/v1/notifications/` (list current user)
   - `GET /api/v1/notifications/history/`
+  - `GET /api/v1/notifications/{id}/attempts/` (delivery attempt history)
   - `POST /api/v1/notifications/{id}/schedule/`
   - `POST /api/v1/notifications/{id}/retry/`
 - Docs:

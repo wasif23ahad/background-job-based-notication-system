@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from apps.notifications.models import Notification, NotificationStatus
 from apps.notifications.serializers import (
+    NotificationAttemptSerializer,
     NotificationCreateSerializer,
     NotificationScheduleSerializer,
     NotificationSerializer,
@@ -32,6 +33,8 @@ class NotificationViewSet(
             return NotificationCreateSerializer
         if self.action == "schedule":
             return NotificationScheduleSerializer
+        if self.action == "attempts":
+            return NotificationAttemptSerializer
         return NotificationSerializer
 
     def perform_create(self, serializer):
@@ -57,6 +60,16 @@ class NotificationViewSet(
         retry_notification(notification)
         notification.refresh_from_db()
         return Response(NotificationSerializer(notification).data)
+
+    @action(detail=True, methods=["get"])
+    def attempts(self, request, pk=None):
+        notification = self.get_object()
+        queryset = notification.attempts.all()
+        page = self.paginate_queryset(queryset)
+        serializer = self.get_serializer(page or queryset, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["post"])
     def schedule(self, request, pk=None):

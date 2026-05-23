@@ -50,3 +50,41 @@ class Notification(TimeStampedModel):
             self.status == NotificationStatus.FAILED
             and self.retry_count < MAX_RETRY_ATTEMPTS
         )
+
+
+class NotificationAttemptOutcome(models.TextChoices):
+    SENT = "sent", _("Sent")
+    FAILED = "failed", _("Failed")
+
+
+class NotificationAttempt(models.Model):
+    notification = models.ForeignKey(
+        Notification,
+        on_delete=models.CASCADE,
+        related_name="attempts",
+    )
+    attempt_number = models.PositiveSmallIntegerField()
+    status_before = models.CharField(max_length=32, choices=NotificationStatus.choices)
+    status_after = models.CharField(max_length=32, choices=NotificationStatus.choices)
+    outcome = models.CharField(
+        max_length=16,
+        choices=NotificationAttemptOutcome.choices,
+    )
+    error_message = models.TextField(blank=True)
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ("-started_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("notification", "attempt_number"),
+                name="unique_notification_attempt_number",
+            )
+        ]
+        indexes = [
+            models.Index(fields=("notification", "started_at")),
+        ]
+
+    def __str__(self):
+        return f"Notification {self.notification_id} attempt #{self.attempt_number} ({self.outcome})"

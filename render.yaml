@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: webbly-notification-api
+    runtime: docker
+    plan: free
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/schema/
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com"
+      - key: RUN_CELERY_WORKER
+        value: "true"
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: WEB_TIMEOUT
+        value: "120"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false

@@ -2,6 +2,8 @@
 
 Backend API for scheduling and processing notifications with Django, DRF, Celery, and Redis.
 
+Detailed Render walkthrough: `RENDER_DEPLOYMENT.md`
+
 ## Tech Stack
 - Django + Django REST Framework
 - JWT auth (SimpleJWT)
@@ -21,6 +23,52 @@ Backend API for scheduling and processing notifications with Django, DRF, Celery
    - `uv run python manage.py runserver`
 5. Start worker:
    - `uv run celery -A config worker -l info`
+
+## Deploy on Render (Free Web Service + External DB/Redis)
+This repository is Render-ready with Docker (`Dockerfile` + `entrypoint.sh`) and a Blueprint (`render.yaml`).
+
+### 1. Push code to GitHub
+Run from project root:
+
+```bash
+git add .
+git commit -m "chore: prepare Render deployment"
+git push origin main
+```
+
+### 2. Create free data services
+1. Create a Neon Postgres database and copy its connection string (`DATABASE_URL`).
+2. Create an Upstash Redis database and copy its `rediss://...` connection string (`REDIS_URL`).
+
+### 3. Deploy on Render (Dashboard)
+1. Open Render dashboard -> `New` -> `Web Service`.
+2. Connect your GitHub repo and select branch `main`.
+3. Keep `Language` as `Docker`.
+4. Leave Docker command blank (use Dockerfile defaults).
+5. Choose instance type `Free`.
+6. Set environment variables:
+   - `DJANGO_SECRET_KEY`: strong random value
+   - `DJANGO_SETTINGS_MODULE`: `config.settings.production`
+   - `DEBUG`: `False`
+   - `ALLOWED_HOSTS`: `.onrender.com`
+   - `CSRF_TRUSTED_ORIGINS`: `https://*.onrender.com`
+   - `DATABASE_URL`: your Neon URL
+   - `REDIS_URL`: your Upstash `rediss://...` URL
+   - `RUN_CELERY_WORKER`: `true` (runs web + worker in one free service)
+7. Health check path: `/api/schema/`
+8. Click `Create Web Service`.
+
+### 4. Verify deployment
+After deploy completes, test:
+- `GET /api/docs/`
+- `GET /api/schema/`
+- `GET /api/v1/health/`
+
+Then run full API flow:
+1. Register user
+2. Get JWT token
+3. Create notification with future `scheduled_time`
+4. Check history and attempts endpoints
 
 ## Redis / Upstash Note
 - `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` work for HTTP Redis calls.

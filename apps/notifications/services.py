@@ -79,15 +79,17 @@ def schedule_notification(notification_id: int, eta=None, force_fail: bool = Fal
 
 def retry_notification(notification: Notification):
     if notification.status == NotificationStatus.PERMANENTLY_FAILED:
-        raise ValidationError("Notification is permanently failed and cannot be retried.")
+        raise ValidationError(
+            {"detail": "Notification is permanently failed and cannot be retried."}
+        )
 
     if notification.status != NotificationStatus.FAILED:
-        raise ValidationError("Only failed notifications can be retried.")
+        raise ValidationError({"detail": "Only failed notifications can be retried."})
 
     if notification.retry_count >= MAX_RETRY_ATTEMPTS:
         notification.status = NotificationStatus.PERMANENTLY_FAILED
         notification.save(update_fields=["status", "updated_at"])
-        raise ValidationError("Notification has reached max retries.")
+        raise ValidationError({"detail": "Notification has reached max retries."})
 
     notification.status = NotificationStatus.PENDING
     notification.last_error = ""

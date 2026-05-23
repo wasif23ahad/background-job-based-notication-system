@@ -1,6 +1,8 @@
 import redis
 from django.conf import settings
 from django.db import connection
+from drf_spectacular.utils import extend_schema
+from rest_framework import serializers
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -21,9 +23,26 @@ def check_redis() -> bool:
     return bool(client.ping())
 
 
+class HealthServicesSerializer(serializers.Serializer):
+    database = serializers.ChoiceField(choices=["ok", "down"])
+    redis = serializers.ChoiceField(choices=["ok", "down"])
+
+
+class HealthCheckResponseSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=["ok", "degraded"])
+    services = HealthServicesSerializer()
+
+
 class HealthCheckAPIView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=None,
+        responses={
+            200: HealthCheckResponseSerializer,
+            503: HealthCheckResponseSerializer,
+        },
+    )
     def get(self, request):
         database_ok = check_database()
         redis_ok = check_redis()

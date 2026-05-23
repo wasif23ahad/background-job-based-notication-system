@@ -5,7 +5,7 @@ services:
     plan: free
     branch: main
     autoDeploy: true
-    healthCheckPath: /api/schema/
+    healthCheckPath: /api/v1/health/
     envVars:
       - key: DJANGO_SECRET_KEY
         generateValue: true

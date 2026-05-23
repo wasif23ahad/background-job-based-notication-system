@@ -58,7 +58,7 @@ git push origin main
    - `CELERY_WORKER_POOL`: `solo`
    - `CELERY_WORKER_CONCURRENCY`: `1`
    - `WEB_CONCURRENCY`: `1`
-7. Health check path: `/api/schema/`
+7. Health check path: `/api/v1/health/`
 8. Click `Create Web Service`.
 
 ### 4. Verify deployment

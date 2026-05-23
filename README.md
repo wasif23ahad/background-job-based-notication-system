@@ -22,6 +22,11 @@ Backend API for scheduling and processing notifications with Django, DRF, Celery
 5. Start worker:
    - `uv run celery -A config worker -l info`
 
+## Redis / Upstash Note
+- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` work for HTTP Redis calls.
+- Celery broker still requires `REDIS_URL` / `CELERY_BROKER_URL` with `redis://` or `rediss://`.
+- If broker is unreachable, API endpoints still return success, and the notification keeps `pending` with `last_error` explaining the broker issue.
+
 ## Docker Compose
 - `docker compose up --build`
 - Services: `web`, `worker`, `beat`, `db`, `redis`

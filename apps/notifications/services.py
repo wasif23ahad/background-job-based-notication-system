@@ -3,9 +3,7 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
-from django.db import DatabaseError
 from django.utils import timezone
-from kombu.exceptions import OperationalError
 from rest_framework.exceptions import ValidationError
 
 from apps.notifications.models import MAX_RETRY_ATTEMPTS, Notification, NotificationStatus
@@ -47,13 +45,15 @@ def schedule_notification(notification_id: int, eta=None, force_fail: bool = Fal
         return send_notification_task.apply_async(
             kwargs={"notification_id": notification_id, "force_fail": force_fail},
             eta=eta,
+            ignore_result=True,
         )
-    except (OperationalError, OSError, DatabaseError) as exc:
+    except Exception as exc:  # noqa: BLE001
         hint = _redis_hint()
         logger.exception(
-            "Failed to enqueue notification_id=%s. %s",
+            "Failed to enqueue notification_id=%s. %s error=%s",
             notification_id,
             hint,
+            exc,
         )
         if eta <= timezone.now():
             logger.warning(

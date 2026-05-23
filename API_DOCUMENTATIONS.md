@@ -1,24 +1,157 @@
-# API Documentation
+# API Documentation (Postman Manual Testing)
 
-Base URL for local development:
+## 1) Base Setup
+
+Base URL:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-For protected endpoints, send:
+Useful public URLs:
+
+- `GET /` (redirects to `/api/docs/`)
+- `GET /api/docs/`
+- `GET /api/schema/`
+- `GET /api/v1/health/`
+
+Default headers for JSON requests:
+
+```http
+Content-Type: application/json
+X-Request-ID: postman-local-001
+```
+
+For protected endpoints, also send:
 
 ```http
 Authorization: Bearer <access_token>
-Content-Type: application/json
-X-Request-ID: optional-client-request-id
 ```
 
-Every response includes `X-Request-ID`.
+All responses include an `X-Request-ID` header.
 
-## Health Check
-### GET `/api/v1/health/`
-Auth: not required
+## 2) Postman Environment Variables
+
+Create a Postman environment with:
+
+- `base_url` = `http://127.0.0.1:8000`
+- `username` = `demo-user`
+- `email` = `demo-user@example.com`
+- `password` = `strong-pass-123`
+- `access_token` = (empty initially)
+- `refresh_token` = (empty initially)
+- `notification_id` = (empty initially)
+- `failed_notification_id` = (empty initially)
+
+## 3) Authentication APIs
+
+### 3.1 Register User
+
+`POST {{base_url}}/api/v1/auth/register/`
+
+Body:
+
+```json
+{
+  "username": "{{username}}",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+```
+
+Expected `201`:
+
+```json
+{
+  "id": 1,
+  "username": "demo-user",
+  "email": "demo-user@example.com"
+}
+```
+
+Common `400`:
+
+```json
+{
+  "username": [
+    "A user with that username already exists."
+  ]
+}
+```
+
+Password too short example (`< 8 chars`):
+
+```json
+{
+  "password": [
+    "Ensure this field has at least 8 characters."
+  ]
+}
+```
+
+### 3.2 Obtain JWT Token
+
+`POST {{base_url}}/api/v1/auth/token/`
+
+Body:
+
+```json
+{
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+```
+
+Expected `200`:
+
+```json
+{
+  "refresh": "<refresh_token>",
+  "access": "<access_token>"
+}
+```
+
+Postman test script (save tokens):
+
+```javascript
+const data = pm.response.json();
+pm.environment.set("access_token", data.access);
+pm.environment.set("refresh_token", data.refresh);
+```
+
+Invalid credentials `401`:
+
+```json
+{
+  "detail": "No active account found with the given credentials"
+}
+```
+
+### 3.3 Refresh JWT Token
+
+`POST {{base_url}}/api/v1/auth/token/refresh/`
+
+Body:
+
+```json
+{
+  "refresh": "{{refresh_token}}"
+}
+```
+
+Expected `200`:
+
+```json
+{
+  "access": "<new_access_token>"
+}
+```
+
+## 4) Health, Schema, Docs
+
+### 4.1 Health Check
+
+`GET {{base_url}}/api/v1/health/` (public)
 
 Expected `200`:
 
@@ -32,7 +165,7 @@ Expected `200`:
 }
 ```
 
-Expected `503` when a dependency is down:
+Possible `503` when dependency is down:
 
 ```json
 {
@@ -44,93 +177,27 @@ Expected `503` when a dependency is down:
 }
 ```
 
-## Authentication
-### POST `/api/v1/auth/register/`
-Auth: not required
+### 4.2 Schema
 
-Request:
+`GET {{base_url}}/api/schema/` (public, OpenAPI JSON/YAML response)
 
-```json
-{
-  "username": "demo-user",
-  "email": "demo@example.com",
-  "password": "strong-pass-123"
-}
+### 4.3 Swagger UI
+
+`GET {{base_url}}/api/docs/` (public HTML UI)
+
+## 5) Notification APIs
+
+All notification endpoints below require:
+
+```http
+Authorization: Bearer {{access_token}}
 ```
 
-Expected `201`:
+### 5.1 Create Notification
 
-```json
-{
-  "id": 1,
-  "username": "demo-user",
-  "email": "demo@example.com"
-}
-```
+`POST {{base_url}}/api/v1/notifications/`
 
-Expected `400` for duplicate username:
-
-```json
-{
-  "username": [
-    "A user with that username already exists."
-  ]
-}
-```
-
-### POST `/api/v1/auth/token/`
-Auth: not required
-
-Request:
-
-```json
-{
-  "username": "demo-user",
-  "password": "strong-pass-123"
-}
-```
-
-Expected `200`:
-
-```json
-{
-  "refresh": "<refresh_token>",
-  "access": "<access_token>"
-}
-```
-
-Expected `401` for invalid credentials:
-
-```json
-{
-  "detail": "No active account found with the given credentials"
-}
-```
-
-### POST `/api/v1/auth/token/refresh/`
-Auth: not required
-
-Request:
-
-```json
-{
-  "refresh": "<refresh_token>"
-}
-```
-
-Expected `200`:
-
-```json
-{
-  "access": "<new_access_token>"
-}
-```
-
-## Notifications
-### POST `/api/v1/notifications/`
-Auth: required
-
-Request:
+Body:
 
 ```json
 {
@@ -151,7 +218,13 @@ Expected `201`:
 }
 ```
 
-Expected `400` for past time:
+Postman test script (save id):
+
+```javascript
+pm.environment.set("notification_id", pm.response.json().id);
+```
+
+Past time `400`:
 
 ```json
 {
@@ -161,21 +234,38 @@ Expected `400` for past time:
 }
 ```
 
-Expected `401` without token:
+Missing fields `400`:
 
 ```json
 {
-  "detail": "Authentication credentials were not provided."
+  "title": ["This field is required."],
+  "message": ["This field is required."],
+  "scheduled_time": ["This field is required."]
 }
 ```
 
-### GET `/api/v1/notifications/`
-Auth: required
+Malformed datetime `400`:
 
-Optional query:
+```json
+{
+  "scheduled_time": [
+    "Datetime has wrong format. Use one of these formats instead: YYYY-MM-DDThh:mm[:ss[.uuuuuu]][+HH:MM|-HH:MM|Z]."
+  ]
+}
+```
+
+### 5.2 List Notifications
+
+`GET {{base_url}}/api/v1/notifications/`
+
+Query params:
+
+- `status` (optional): `pending`, `processing`, `sent`, `failed`, `permanently_failed`
+
+Example with query:
 
 ```text
-?status=failed
+GET {{base_url}}/api/v1/notifications/?status=failed
 ```
 
 Expected `200`:
@@ -197,27 +287,13 @@ Expected `200`:
 ]
 ```
 
-### GET `/api/v1/notifications/{id}/`
-Auth: required
+### 5.3 Retrieve One Notification
 
-Expected `200`:
+`GET {{base_url}}/api/v1/notifications/{{notification_id}}/`
 
-```json
-{
-  "id": 1,
-  "title": "Payment reminder",
-  "message": "Your payment is due tomorrow.",
-  "scheduled_time": "2026-05-24T10:00:00Z",
-  "status": "pending",
-  "retry_count": 0,
-  "last_error": "",
-  "processed_at": null,
-  "created_at": "2026-05-23T08:00:00Z",
-  "updated_at": "2026-05-23T08:00:00Z"
-}
-```
+Expected `200` object shape is same as list item.
 
-Expected `404` for another user's notification:
+Possible `404`:
 
 ```json
 {
@@ -225,32 +301,17 @@ Expected `404` for another user's notification:
 }
 ```
 
-### GET `/api/v1/notifications/history/`
-Auth: required
+### 5.4 History
 
-Expected `200`:
+`GET {{base_url}}/api/v1/notifications/history/`
 
-```json
-[
-  {
-    "id": 1,
-    "title": "Payment reminder",
-    "message": "Your payment is due tomorrow.",
-    "scheduled_time": "2026-05-24T10:00:00Z",
-    "status": "sent",
-    "retry_count": 0,
-    "last_error": "",
-    "processed_at": "2026-05-24T10:00:02Z",
-    "created_at": "2026-05-23T08:00:00Z",
-    "updated_at": "2026-05-24T10:00:02Z"
-  }
-]
-```
+This returns current user notifications (owner-scoped). Same JSON shape as list.
 
-### POST `/api/v1/notifications/{id}/schedule/`
-Auth: required
+### 5.5 Reschedule Notification
 
-Request:
+`POST {{base_url}}/api/v1/notifications/{{notification_id}}/schedule/`
+
+Body:
 
 ```json
 {
@@ -275,7 +336,17 @@ Expected `200`:
 }
 ```
 
-Expected `400` for sent or permanently failed notification:
+Past datetime `400`:
+
+```json
+{
+  "scheduled_time": [
+    "Scheduled time must be in the future."
+  ]
+}
+```
+
+Terminal status (sent/permanently_failed) `400`:
 
 ```json
 {
@@ -283,29 +354,15 @@ Expected `400` for sent or permanently failed notification:
 }
 ```
 
-### POST `/api/v1/notifications/{id}/retry/`
-Auth: required
+### 5.6 Retry Failed Notification
 
-Request body: empty
+`POST {{base_url}}/api/v1/notifications/{{notification_id}}/retry/`
 
-Expected `200` after successful retry:
+Body: empty `{}` is fine.
 
-```json
-{
-  "id": 1,
-  "title": "Payment reminder",
-  "message": "Your payment is due tomorrow.",
-  "scheduled_time": "2026-05-24T10:00:00Z",
-  "status": "sent",
-  "retry_count": 1,
-  "last_error": "",
-  "processed_at": "2026-05-23T09:15:00Z",
-  "created_at": "2026-05-23T08:00:00Z",
-  "updated_at": "2026-05-23T09:15:00Z"
-}
-```
+Expected `200` returns full notification object.
 
-Expected `400` when notification is not failed:
+If notification is not in `failed` status:
 
 ```json
 {
@@ -313,7 +370,7 @@ Expected `400` when notification is not failed:
 }
 ```
 
-Expected `400` after permanent failure:
+If notification already permanently failed:
 
 ```json
 {
@@ -321,8 +378,9 @@ Expected `400` after permanent failure:
 }
 ```
 
-### GET `/api/v1/notifications/{id}/attempts/`
-Auth: required
+### 5.7 Notification Attempt History
+
+`GET {{base_url}}/api/v1/notifications/{{notification_id}}/attempts/`
 
 Expected `200`:
 
@@ -341,7 +399,7 @@ Expected `200`:
 ]
 ```
 
-Expected failed attempt:
+Failure attempt example:
 
 ```json
 [
@@ -358,25 +416,65 @@ Expected failed attempt:
 ]
 ```
 
-## API Schema and Swagger
-### GET `/api/schema/`
-Auth: not required
+## 6) Manual Postman Test Sequence (End-to-End)
 
-Expected `200`: OpenAPI schema document.
-
-### GET `/api/docs/`
-Auth: not required
-
-Expected `200`: Swagger UI HTML page.
-
-## Postman Flow
 1. `POST /api/v1/auth/register/`
-2. `POST /api/v1/auth/token/`
-3. Store `access` token as `{{access_token}}`.
-4. Add `Authorization: Bearer {{access_token}}` to protected requests.
-5. `POST /api/v1/notifications/` with a future `scheduled_time`.
-6. `GET /api/v1/notifications/` and `GET /api/v1/notifications/history/`.
-7. Use `POST /api/v1/notifications/{id}/schedule/` to reschedule.
-8. Use `POST /api/v1/notifications/{id}/retry/` after a notification has failed.
-9. Use `GET /api/v1/notifications/{id}/attempts/` to inspect send attempts.
-10. Check `GET /api/v1/health/` before running queue-dependent tests.
+2. `POST /api/v1/auth/token/` and save `access_token`, `refresh_token`
+3. `GET /api/v1/health/`
+4. `POST /api/v1/notifications/` with future `scheduled_time`
+5. `GET /api/v1/notifications/`
+6. `GET /api/v1/notifications/{{notification_id}}/`
+7. `POST /api/v1/notifications/{{notification_id}}/schedule/` with new future time
+8. `GET /api/v1/notifications/history/`
+9. `GET /api/v1/notifications/{{notification_id}}/attempts/`
+
+## 7) How to Manually Force a Failure and Test Retry Rules
+
+Use the default failure keyword `__FAIL__` in title or message.
+
+1. Create notification:
+
+```json
+{
+  "title": "Payment __FAIL__",
+  "message": "Intentional failure test",
+  "scheduled_time": "2026-05-24T10:00:00Z"
+}
+```
+
+2. Wait for worker/beat processing.
+3. Check `GET /api/v1/notifications/{{id}}/` and verify status becomes `failed` (or `permanently_failed` if max retries reached).
+4. Call `POST /api/v1/notifications/{{id}}/retry/` repeatedly.
+5. After 3 failed attempts, status becomes `permanently_failed` and further retry returns:
+
+```json
+{
+  "detail": "Notification is permanently failed and cannot be retried."
+}
+```
+
+## 8) Common Auth Errors
+
+Missing token `401`:
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+Expired/invalid token `401`:
+
+```json
+{
+  "detail": "Given token not valid for any token type",
+  "code": "token_not_valid",
+  "messages": [
+    {
+      "token_class": "AccessToken",
+      "token_type": "access",
+      "message": "Token is invalid or expired"
+    }
+  ]
+}
+```

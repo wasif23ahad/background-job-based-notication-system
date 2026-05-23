@@ -92,3 +92,11 @@ def test_health_endpoint_is_public(monkeypatch):
     client = APIClient()
     response = client.get("/api/v1/health/")
     assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_root_path_redirects_to_api_docs():
+    client = APIClient()
+    response = client.get("/")
+    assert response.status_code == 302
+    assert response["Location"] == "/api/docs/"

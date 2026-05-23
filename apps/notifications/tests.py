@@ -121,3 +121,40 @@ def test_retry_limits_to_three_failures(auth_client, user):
 
     second_response = auth_client.post(f"/api/v1/notifications/{notification.id}/retry/")
     assert second_response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_schedule_endpoint_rejects_past_time(auth_client, user):
+    notification = Notification.objects.create(
+        owner=user,
+        title="Schedule me",
+        message="Future only",
+        scheduled_time=timezone.now() + timedelta(minutes=20),
+    )
+    response = auth_client.post(
+        f"/api/v1/notifications/{notification.id}/schedule/",
+        {"scheduled_time": (timezone.now() - timedelta(minutes=1)).isoformat()},
+        format="json",
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_schedule_endpoint_reschedules_pending_notification(auth_client, user):
+    notification = Notification.objects.create(
+        owner=user,
+        title="Schedule me",
+        message="Future only",
+        scheduled_time=timezone.now() + timedelta(minutes=20),
+    )
+    new_time = timezone.now() + timedelta(hours=1)
+    response = auth_client.post(
+        f"/api/v1/notifications/{notification.id}/schedule/",
+        {"scheduled_time": new_time.isoformat()},
+        format="json",
+    )
+    assert response.status_code == 200
+
+    notification.refresh_from_db()
+    assert notification.status == NotificationStatus.PENDING
+    assert abs((notification.scheduled_time - new_time).total_seconds()) < 1

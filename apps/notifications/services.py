@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
-from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -52,6 +51,4 @@ def retry_notification(notification: Notification):
     notification.last_error = ""
     notification.save(update_fields=["status", "last_error", "updated_at"])
 
-    transaction.on_commit(
-        lambda: schedule_notification(notification_id=notification.id, eta=timezone.now())
-    )
+    schedule_notification(notification_id=notification.id, eta=timezone.now())

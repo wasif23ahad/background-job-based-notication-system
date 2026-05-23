@@ -32,3 +32,12 @@ class NotificationCreateSerializer(serializers.ModelSerializer):
         if value <= timezone.now():
             raise serializers.ValidationError("Scheduled time must be in the future.")
         return value
+
+
+class NotificationScheduleSerializer(serializers.Serializer):
+    scheduled_time = serializers.DateTimeField()
+
+    def validate_scheduled_time(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("Scheduled time must be in the future.")
+        return value

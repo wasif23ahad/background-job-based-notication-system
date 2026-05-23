@@ -3,9 +3,10 @@ from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.notifications.models import Notification
+from apps.notifications.models import Notification, NotificationStatus
 from apps.notifications.serializers import (
     NotificationCreateSerializer,
+    NotificationScheduleSerializer,
     NotificationSerializer,
 )
 from apps.notifications.services import retry_notification, schedule_notification
@@ -29,6 +30,8 @@ class NotificationViewSet(
     def get_serializer_class(self):
         if self.action == "create":
             return NotificationCreateSerializer
+        if self.action == "schedule":
+            return NotificationScheduleSerializer
         return NotificationSerializer
 
     def perform_create(self, serializer):
@@ -53,4 +56,30 @@ class NotificationViewSet(
         notification = self.get_object()
         retry_notification(notification)
         notification.refresh_from_db()
+        return Response(NotificationSerializer(notification).data)
+
+    @action(detail=True, methods=["post"])
+    def schedule(self, request, pk=None):
+        notification = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        if notification.status in {
+            NotificationStatus.SENT,
+            NotificationStatus.PERMANENTLY_FAILED,
+        }:
+            return Response(
+                {"detail": "Sent or permanently failed notifications cannot be rescheduled."},
+                status=400,
+            )
+
+        notification.scheduled_time = serializer.validated_data["scheduled_time"]
+        notification.status = NotificationStatus.PENDING
+        notification.save(update_fields=["scheduled_time", "status", "updated_at"])
+
+        transaction.on_commit(
+            lambda: schedule_notification(
+                notification_id=notification.id, eta=notification.scheduled_time
+            )
+        )
         return Response(NotificationSerializer(notification).data)

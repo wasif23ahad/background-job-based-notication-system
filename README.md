@@ -27,6 +27,11 @@ Backend API for scheduling and processing notifications with Django, DRF, Celery
 - Celery broker still requires `REDIS_URL` / `CELERY_BROKER_URL` with `redis://` or `rediss://`.
 - If broker is unreachable, API endpoints still return success, and the notification keeps `pending` with `last_error` explaining the broker issue.
 
+## Logging & Monitoring
+- Every response includes `X-Request-ID`.
+- You can pass `X-Request-ID` in requests to keep trace continuity across services.
+- Request logs include method, path, status, duration, user ID, and request ID.
+
 ## Docker Compose
 - `docker compose up --build`
 - Services: `web`, `worker`, `beat`, `db`, `redis`
@@ -45,6 +50,8 @@ Backend API for scheduling and processing notifications with Django, DRF, Celery
 - Docs:
   - `GET /api/schema/`
   - `GET /api/docs/`
+- Monitoring:
+  - `GET /api/v1/health/` (returns `200` when DB + Redis are reachable, else `503`)
 
 ## Business Rules Implemented
 - Reject notifications if `scheduled_time` is in the past.

@@ -55,6 +55,9 @@ git push origin main
    - `DATABASE_URL`: your Neon URL
    - `REDIS_URL`: your Upstash `rediss://...` URL
    - `RUN_CELERY_WORKER`: `true` (runs web + worker in one free service)
+   - `CELERY_WORKER_POOL`: `solo`
+   - `CELERY_WORKER_CONCURRENCY`: `1`
+   - `WEB_CONCURRENCY`: `1`
 7. Health check path: `/api/schema/`
 8. Click `Create Web Service`.
 

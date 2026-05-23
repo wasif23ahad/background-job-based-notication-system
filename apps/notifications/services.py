@@ -3,13 +3,27 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
+from django.db import DatabaseError
 from django.utils import timezone
+from kombu.exceptions import OperationalError
 from rest_framework.exceptions import ValidationError
 
 from apps.notifications.models import MAX_RETRY_ATTEMPTS, Notification, NotificationStatus
 from apps.notifications.tasks import send_notification_task
 
 logger = logging.getLogger(__name__)
+
+
+def _redis_hint() -> str:
+    if settings.UPSTASH_REDIS_REST_URL and settings.UPSTASH_REDIS_REST_TOKEN:
+        return (
+            "Upstash REST credentials are present, but Celery broker requires a Redis TCP URL "
+            "(redis:// or rediss://) in REDIS_URL/CELERY_BROKER_URL."
+        )
+    return (
+        "Redis broker is unavailable. Ensure REDIS_URL/CELERY_BROKER_URL points to a reachable "
+        "redis:// or rediss:// endpoint."
+    )
 
 
 def schedule_notification(notification_id: int, eta=None, force_fail: bool = False):
@@ -29,10 +43,29 @@ def schedule_notification(notification_id: int, eta=None, force_fail: bool = Fal
             force_fail=force_fail,
         )
 
-    return send_notification_task.apply_async(
-        kwargs={"notification_id": notification_id, "force_fail": force_fail},
-        eta=eta,
-    )
+    try:
+        return send_notification_task.apply_async(
+            kwargs={"notification_id": notification_id, "force_fail": force_fail},
+            eta=eta,
+        )
+    except (OperationalError, OSError, DatabaseError) as exc:
+        hint = _redis_hint()
+        logger.exception(
+            "Failed to enqueue notification_id=%s. %s",
+            notification_id,
+            hint,
+        )
+        if eta <= timezone.now():
+            logger.warning(
+                "Running notification task locally for notification_id=%s due broker failure.",
+                notification_id,
+            )
+            return send_notification_task.apply(
+                kwargs={"notification_id": notification_id, "force_fail": force_fail}
+            )
+
+        Notification.objects.filter(id=notification_id).update(last_error=hint)
+        return None
 
 
 def retry_notification(notification: Notification):

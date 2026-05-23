@@ -7,6 +7,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.constants import HealthDependencyStatus, HealthOverallStatus
+
 
 def check_database() -> bool:
     with connection.cursor() as cursor:
@@ -24,12 +26,12 @@ def check_redis() -> bool:
 
 
 class HealthServicesSerializer(serializers.Serializer):
-    database = serializers.ChoiceField(choices=["ok", "down"])
-    redis = serializers.ChoiceField(choices=["ok", "down"])
+    database = serializers.ChoiceField(choices=HealthDependencyStatus.choices)
+    redis = serializers.ChoiceField(choices=HealthDependencyStatus.choices)
 
 
 class HealthCheckResponseSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=["ok", "degraded"])
+    status = serializers.ChoiceField(choices=HealthOverallStatus.choices)
     services = HealthServicesSerializer()
 
 
@@ -48,11 +50,19 @@ class HealthCheckAPIView(APIView):
         redis_ok = check_redis()
 
         payload = {
-            "status": "ok" if database_ok and redis_ok else "degraded",
+            "status": (
+                HealthOverallStatus.OK
+                if database_ok and redis_ok
+                else HealthOverallStatus.DEGRADED
+            ),
             "services": {
-                "database": "ok" if database_ok else "down",
-                "redis": "ok" if redis_ok else "down",
+                "database": (
+                    HealthDependencyStatus.OK if database_ok else HealthDependencyStatus.DOWN
+                ),
+                "redis": (
+                    HealthDependencyStatus.OK if redis_ok else HealthDependencyStatus.DOWN
+                ),
             },
         }
-        status_code = 200 if payload["status"] == "ok" else 503
+        status_code = 200 if payload["status"] == HealthOverallStatus.OK else 503
         return Response(payload, status=status_code)

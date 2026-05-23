@@ -130,6 +130,12 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "Webbly Notification API",
     "DESCRIPTION": "Background job based notification system backend",
     "VERSION": "1.0.0",
+    "ENUM_NAME_OVERRIDES": {
+        "HealthDependencyStatusEnum": "apps.common.constants.HealthDependencyStatus",
+        "HealthOverallStatusEnum": "apps.common.constants.HealthOverallStatus",
+        "NotificationStatusEnum": "apps.notifications.models.NotificationStatus",
+        "NotificationAttemptOutcomeEnum": "apps.notifications.models.NotificationAttemptOutcome",
+    },
 }
 
 SIMPLE_JWT = {

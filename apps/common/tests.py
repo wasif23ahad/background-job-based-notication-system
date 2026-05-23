@@ -85,6 +85,16 @@ def test_swagger_docs_endpoint_is_public():
 
 
 @pytest.mark.django_db
+def test_swagger_docs_endpoint_returns_json_hint_for_json_accept_header():
+    client = APIClient()
+    response = client.get("/api/docs/", HTTP_ACCEPT="application/json")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema"] == "/api/schema/"
+    assert payload["docs"] == "/api/docs/"
+
+
+@pytest.mark.django_db
 def test_health_endpoint_is_public(monkeypatch):
     monkeypatch.setattr("apps.common.views.check_database", lambda: True)
     monkeypatch.setattr("apps.common.views.check_redis", lambda: True)
@@ -100,3 +110,14 @@ def test_root_path_redirects_to_api_docs():
     response = client.get("/")
     assert response.status_code == 302
     assert response["Location"] == "/api/docs/"
+
+
+@pytest.mark.django_db
+def test_root_path_returns_json_index_for_json_accept_header():
+    client = APIClient()
+    response = client.get("/", HTTP_ACCEPT="application/json")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["docs"] == "/api/docs/"
+    assert payload["schema"] == "/api/schema/"
+    assert payload["health"] == "/api/v1/health/"

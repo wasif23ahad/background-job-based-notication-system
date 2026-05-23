@@ -1,121 +1,160 @@
-# Background Job Notification System
+# Webbly Notification API
 
-Backend API for scheduling and processing notifications with Django, DRF, Celery, and Redis.
+> **Live API:** [https://background-job-based-notication-system.onrender.com](https://background-job-based-notication-system.onrender.com)
+>
+> **Note:** Since it is deployed on Tender, the service may take some time to load on first access.
 
-Detailed Render walkthrough: `RENDER_DEPLOYMENT.md`
+Production-ready backend for a background job based notification system built with Django, DRF, Celery, and Redis.
+
+## Overview
+- JWT-secured API for creating and managing scheduled notifications.
+- Async delivery pipeline with retry and permanent-failure handling.
+- Owner-scoped notification access (users can only access their own data).
+- OpenAPI schema and Swagger UI included.
+
+Detailed endpoint usage is documented in [API_DOCUMENTS.md](./API_DOCUMENTS.md).
 
 ## Tech Stack
+- Python 3.12
 - Django + Django REST Framework
-- JWT auth (SimpleJWT)
-- Celery + Redis for background jobs
-- PostgreSQL via `DATABASE_URL` (Neon or local Postgres)
-- OpenAPI docs via drf-spectacular
+- SimpleJWT (authentication)
+- Celery + Redis (background jobs)
+- PostgreSQL (via `DATABASE_URL`)
+- drf-spectacular (OpenAPI/Swagger)
+- `uv` (dependency and command runner)
 
-## Quick Start (Local)
-1. Install dependencies:
-   - `uv sync --dev`
-2. Configure environment:
-   - `.env.example` documents all keys and provider URLs.
-   - `.env` is already created locally; replace secrets as needed.
-3. Run migrations:
-   - `uv run python manage.py migrate`
-4. Start API:
-   - `uv run python manage.py runserver`
-5. Start worker:
-   - `uv run celery -A config worker -l info`
-
-## Deploy on Render (Free Web Service + External DB/Redis)
-This repository is Render-ready with Docker (`Dockerfile` + `entrypoint.sh`) and a Blueprint (`render.yaml`).
-
-### 1. Push code to GitHub
-Run from project root:
-
-```bash
-git add .
-git commit -m "chore: prepare Render deployment"
-git push origin main
+## Project Structure
+```text
+apps/
+  accounts/        # registration + JWT integration
+  notifications/   # models, API, services, celery tasks
+  common/          # health checks, middleware, shared utilities
+config/
+  settings/        # base/local/production/test settings
+  urls.py          # root routes + API wiring
 ```
 
-### 2. Create free data services
-1. Create a Neon Postgres database and copy its connection string (`DATABASE_URL`).
-2. Create an Upstash Redis database and copy its `rediss://...` connection string (`REDIS_URL`).
+## Local Setup
+1. Install dependencies:
+   - `uv sync --dev`
+2. Create environment file:
+   - `cp .env.example .env` (or copy manually on Windows)
+3. Apply migrations:
+   - `uv run python manage.py migrate`
+4. Run API:
+   - `uv run python manage.py runserver`
+5. Run worker (separate terminal):
+   - `uv run celery -A config worker -l info`
 
-### 3. Deploy on Render (Dashboard)
-1. Open Render dashboard -> `New` -> `Web Service`.
-2. Connect your GitHub repo and select branch `main`.
-3. Keep `Language` as `Docker`.
-4. Leave Docker command blank (use Dockerfile defaults).
-5. Choose instance type `Free`.
-6. Set environment variables:
-   - `DJANGO_SECRET_KEY`: strong random value
-   - `DJANGO_SETTINGS_MODULE`: `config.settings.production`
-   - `DEBUG`: `False`
-   - `ALLOWED_HOSTS`: `.onrender.com`
-   - `CSRF_TRUSTED_ORIGINS`: `https://*.onrender.com`
-   - `DATABASE_URL`: your Neon URL
-   - `REDIS_URL`: your Upstash `rediss://...` URL
-   - `RUN_CELERY_WORKER`: `true` (runs web + worker in one free service)
-   - `CELERY_WORKER_POOL`: `solo`
-   - `CELERY_WORKER_CONCURRENCY`: `1`
-   - `WEB_CONCURRENCY`: `1`
-7. Health check path: `/api/v1/health/`
-8. Click `Create Web Service`.
+## Local Setup with Docker
+Use this when you want to run the full stack (API + Celery worker + Celery beat + Postgres + Redis) locally.
 
-### 4. Verify deployment
-After deploy completes, test:
-- `GET /api/docs/`
-- `GET /api/schema/`
-- `GET /api/v1/health/`
+1. Ensure Docker Desktop is running.
+2. Create `.env` from `.env.example`.
+3. For Docker local networking, keep these values:
+   - `DATABASE_URL=postgresql://postgres:postgres@db:5432/webbly_notifications`
+   - `REDIS_URL=redis://redis:6379/0`
+4. Build and start all services:
+   - `docker compose up --build`
+5. Run in detached mode (optional):
+   - `docker compose up -d --build`
 
-Then run full API flow:
-1. Register user
-2. Get JWT token
-3. Create notification with future `scheduled_time`
-4. Check history and attempts endpoints
+Services started by compose:
+- `web` (Django API on port `8000`)
+- `worker` (Celery worker)
+- `beat` (Celery beat scheduler)
+- `db` (Postgres on `5432`)
+- `redis` (Redis on `6379`)
 
-## Redis / Upstash Note
-- `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` work for HTTP Redis calls.
-- Celery broker still requires `REDIS_URL` / `CELERY_BROKER_URL` with `redis://` or `rediss://`.
-- If broker is unreachable, API endpoints still return success, and the notification keeps `pending` with `last_error` explaining the broker issue.
+Useful Docker commands:
+- View logs for all services: `docker compose logs -f`
+- View only API logs: `docker compose logs -f web`
+- Stop services: `docker compose down`
+- Stop and remove volumes (full reset): `docker compose down -v`
 
-## Logging & Monitoring
-- Every response includes `X-Request-ID`.
-- You can pass `X-Request-ID` in requests to keep trace continuity across services.
-- Request logs include method, path, status, duration, user ID, and request ID.
+### Docker Quick Verify
+After `docker compose up --build`, run this quick checklist:
 
-## Docker Compose
-- `docker compose up --build`
-- Services: `web`, `worker`, `beat`, `db`, `redis`
+1. Check health:
+   - Open `http://127.0.0.1:8000/api/v1/health/`
+   - Expect `status: "ok"` with `database: "ok"` and `redis: "ok"`.
+2. Open docs:
+   - Open `http://127.0.0.1:8000/api/docs/`
+   - Confirm Swagger UI loads.
+3. Create user:
+   - `POST /api/v1/auth/register/` from Swagger or Postman.
+4. Obtain token:
+   - `POST /api/v1/auth/token/`
+   - Copy the `access` token and click **Authorize** in Swagger.
+5. Create notification:
+   - `POST /api/v1/notifications/` with a future `scheduled_time`.
+6. Verify background processing:
+   - Watch worker logs: `docker compose logs -f worker`
+   - Confirm task execution and notification status transition.
+7. Verify API state:
+   - `GET /api/v1/notifications/`
+   - `GET /api/v1/notifications/{id}/attempts/`
 
-## API Endpoints
+## Useful Local URLs
+- `http://127.0.0.1:8000/`
+- `http://127.0.0.1:8000/api/docs/`
+- `http://127.0.0.1:8000/api/schema/`
+- `http://127.0.0.1:8000/api/v1/health/`
+
+## Environment Variables
+Minimum required for production:
+- `DJANGO_SECRET_KEY`
+- `DJANGO_SETTINGS_MODULE=config.settings.production`
+- `DATABASE_URL`
+- `REDIS_URL`
+- `ALLOWED_HOSTS`
+- `CSRF_TRUSTED_ORIGINS`
+
+Important worker/runtime controls:
+- `RUN_CELERY_WORKER=true`
+- `CELERY_WORKER_POOL=solo`
+- `CELERY_WORKER_CONCURRENCY=1`
+- `WEB_CONCURRENCY=1`
+- `WEB_TIMEOUT=120`
+
+Use `.env.example` for full variable reference and provider URLs.
+
+## API Summary
 - Auth:
   - `POST /api/v1/auth/register/`
   - `POST /api/v1/auth/token/`
   - `POST /api/v1/auth/token/refresh/`
 - Notifications:
-  - `POST /api/v1/notifications/` (create + schedule)
-  - `GET /api/v1/notifications/` (list current user)
+  - `POST /api/v1/notifications/`
+  - `GET /api/v1/notifications/`
+  - `GET /api/v1/notifications/{id}/`
   - `GET /api/v1/notifications/history/`
-  - `GET /api/v1/notifications/{id}/attempts/` (delivery attempt history)
   - `POST /api/v1/notifications/{id}/schedule/`
   - `POST /api/v1/notifications/{id}/retry/`
-- Docs:
+  - `GET /api/v1/notifications/{id}/attempts/`
+- System:
+  - `GET /api/v1/health/`
   - `GET /api/schema/`
   - `GET /api/docs/`
-- Monitoring:
-  - `GET /api/v1/health/` (returns `200` when DB + Redis are reachable, else `503`)
 
-## Business Rules Implemented
-- Reject notifications if `scheduled_time` is in the past.
-- Retry allowed only for `failed` notifications.
-- On each delivery failure, increment `retry_count`.
-- At 3 failures, mark as `permanently_failed` and block further retries.
+## Business Rules
+- `scheduled_time` must be in the future.
+- Retries are allowed only when notification status is `failed`.
+- Max retry attempts: `3`.
+- After max failures, status becomes `permanently_failed`.
 
-## Tests
-- Run full suite: `uv run pytest -q`
-- Current coverage focus:
-  - auth flow
-  - schedule validation
-  - history ownership filter
-  - retry success path
-  - max retry cap enforcement
+## Testing
+- Run all tests:
+  - `uv run pytest -q`
+- Run Django checks:
+  - `uv run python manage.py check --settings=config.settings.local`
+
+## Deployment (Render)
+The repository includes `Dockerfile`, `entrypoint.sh`, and `render.yaml` for Render deployment.
+
+Recommended Render settings:
+- Health check path: `/api/v1/health/`
+- `RUN_CELERY_WORKER=true`
+- `WEB_CONCURRENCY=1`
+- `CELERY_WORKER_POOL=solo`
+- `CELERY_WORKER_CONCURRENCY=1`
